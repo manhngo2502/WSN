@@ -20,7 +20,9 @@ void restart_ESP();
 ESP8266WebServer webServer(80);
 WiFiClient client;
 PubSubClient mqtt_client;
-const char *Server_MQTT="192.168.4.107";
+//const char *Server_MQTT="192.168.4.107";
+const char *Server_MQTT="192.168.102.194";
+
 const int  port_MQTT=1883;
 
 char *topic_sub_test="from-esp8266-test";
@@ -233,7 +235,6 @@ void setup() {
     delay(100);
     }
   Serial.println("Connected to Server");
-  mqtt_client.setBufferSize(255);
 
  }
 }
@@ -248,13 +249,14 @@ void loop() {
   mqtt_client.write((byte)46);
   mqtt_client.write((byte)random(48,57));
   mqtt_client.endPublish();
-  mqtt_client.disconnect();
+  delay(1000);
+  //mqtt_client.disconnect();
   
   }
-  else{
-    delay(1000);
-    mqtt_client.connect(id.c_str());
-  }
+  // else{
+  //   delay(1000);
+  //   mqtt_client.connect(id.c_str());
+  // }
   
 }
 
