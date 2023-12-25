@@ -4,7 +4,7 @@
 #include <EEPROM.h>
 #include <PubSubClient.h>
 #include <WiFiClient.h>
-
+#include <ArduinoJson.h>
 boolean read_EEPROM();
 void write_EEPROM();
 void checkConnection();
@@ -13,18 +13,18 @@ void get_IP();
 void clear_EEPROM();
 void restart_ESP();
 void ledWarningErrorConnectToSerVer();
-void convertStringToInt();
 void packetMsg();
 void clearMsg();
-
+void callback(char *topic,byte *payload, unsigned int length);
+void readTemp();
+void blink();
 ESP8266WebServer webServer(80);
 WiFiClient client;
 PubSubClient mqtt_client;
 char *topic_sub_test= "from-esp8266-test";
-//==========AP info=======================//
+char *topic_update = "update";
 char* ssid_ap = "Config_WiFi";
 char* pass_ap = "12345678";
-
 IPAddress ip_ap(192,168,1,1);
 IPAddress gateway_ap(192,168,1,1);
 IPAddress subnet_ap(255,255,255,0);
@@ -33,26 +33,21 @@ String pass="";
 String id="";
 String Server_MQTT="";
 String port_MQTT="";
-int port=0;
 
-
-byte temp3[7]={110, 111, 100, 101,48, 51,32};
 byte msg[12];
 int temp;
+DynamicJsonDocument jsonDocument(1024);
+float temp1=25;
+float temp2=50;
+float temp3=75;
+const int sensorPin = A0;
+float temperature;
+float preTemperature;
+int ledPin1 = 16;
+int ledPin2 = 5;
+int ledPin3 = 4;
 
-void callback(char *topic,byte *payload, unsigned int length){
-  char msg[255]="";
-  Serial.print("Received from ");
-  Serial.println(topic);
-  Serial.print("Message : ");
-  for(size_t i=0; i < length;i++){
-    msg[i]=(char)payload[i];
-  }
-  delay(10);
-  Serial.print(msg);
-  Serial.println();
-  Serial.println("------------------------------------------");
-}
+
 
 //=========Biến chứa mã HTLM Website Config WIFI=====//
 const char MainPage[] PROGMEM = R"=====(
@@ -207,6 +202,9 @@ const char MainPage[] PROGMEM = R"=====(
 )=====";
 //=========================================//
 void setup() {
+  pinMode(ledPin1,OUTPUT);
+  pinMode(ledPin2,OUTPUT);
+  pinMode(ledPin3,OUTPUT);
   Serial.begin(9600);
   EEPROM.begin(512);       //Khởi tạo bộ nhớ EEPROM
   delay(100);
@@ -230,10 +228,9 @@ void setup() {
   webServer.on("/writeEEPROM",write_EEPROM);
   webServer.on("/restartESP",restart_ESP);
   webServer.on("/clearEEPROM",clear_EEPROM);
-  convertStringToInt();
  if(WiFi.status()==WL_CONNECTED){
   mqtt_client.setClient(client);
-  mqtt_client.setServer(Server_MQTT.c_str(),port);
+  mqtt_client.setServer(Server_MQTT.c_str(),port_MQTT.toInt());
   mqtt_client.setCallback(callback);
   int count=0;
   while(!mqtt_client.connect(id.c_str())){
@@ -249,6 +246,7 @@ void setup() {
     Serial.println("Connected to Server");
   }
   else{
+
     Serial.println("Please Reconfig Wifi and Server");
     clear_EEPROM();
     WiFi.disconnect();
@@ -262,19 +260,27 @@ void setup() {
     Serial.println(ip_ap);
   }
  }
-}
-void loop() {
-  webServer.handleClient();
-  temp=random(200,1500);
-  
-  if(mqtt_client.connected()){
+readTemp();
+ if(mqtt_client.connected()){
   packetMsg();
   mqtt_client.beginPublish(topic_sub_test,sizeof(msg),false);
   mqtt_client.write(msg,sizeof(msg));
   mqtt_client.endPublish();
-  delay(1000);
+ }
+ mqtt_client.subscribe(topic_update);
+}
+void loop() {
+  webServer.handleClient();
+  if(mqtt_client.connected()){
+        readTemp();
+        packetMsg();
+        mqtt_client.beginPublish(topic_sub_test,sizeof(msg),false);
+        mqtt_client.write(msg,sizeof(msg));
+        mqtt_client.endPublish();
+        delay(2000);
   }
-  clearMsg();
+  mqtt_client.loop();
+
 }
 void mainpage(){
   String s = FPSTR(MainPage);
@@ -410,25 +416,60 @@ void clear_EEPROM(){
   webServer.send(200,"text/html", s);
 }
 void ledWarningErrorConnectToSerVer(){
-  Serial.println("Server Error");
-}
-void convertStringToInt(){
-  int length= port_MQTT.length();
-  for(int i=length-1;i>=0;i--){
-    port+=(port_MQTT[i]-48)*pow(10,length-i-1);
-  }
-  Serial.println(port);
+  digitalWrite(ledPin1,HIGH);
+  digitalWrite(ledPin2,HIGH);
+  digitalWrite(ledPin3,HIGH);
 }
 void packetMsg(){
  
-  String temp_str=id+':' +String((float)temp/10);
-  Serial.println(temp_str);
+  String temp_str=id+':' +String(temperature);
   for(int i=0;i<temp_str.length();i++){
     msg[i]=(int)temp_str[i];
   }
+  Serial.println(temp_str);
 }
-void clearMsg(){
-  for(int i=0;i<sizeof(msg);i++){
-    msg[i]=0;
+void callback(char *topic,byte *payload, unsigned int length){
+  String msg;
+  Serial.print("Received from ");
+  Serial.println(topic);
+  Serial.print("Message : ");
+  for(size_t i=0; i < length;i++){
+    msg += (char)payload[i];
+    }
+  deserializeJson(jsonDocument,msg);
+  Serial.println(jsonDocument.as<String>());
+  JsonVariant variant= jsonDocument.as<JsonVariant>();
+  temp1= variant["level1"];
+  temp2= variant["level2"];
+  temp3= variant["level3"];
+}
+void readTemp(){
+  int sensorValue=analogRead(sensorPin);
+  temperature=(sensorValue*5.0/1024.0)*100.0;
+   if (temperature > temp3) {
+    digitalWrite(ledPin3, HIGH);  
+    digitalWrite(ledPin2, LOW);   
+    digitalWrite(ledPin1, LOW);   
+  } else if (temperature > temp2) {
+    digitalWrite(ledPin2, HIGH);  
+    digitalWrite(ledPin3, LOW);   
+    digitalWrite(ledPin1, LOW);   
+  } else if (temperature > temp1) {
+    digitalWrite(ledPin1, HIGH);  
+    digitalWrite(ledPin2, LOW);   
+    digitalWrite(ledPin3, LOW);   
+  } else {
+   blink();  
   }
+  
+}
+void blink() {
+  digitalWrite(ledPin1, HIGH);
+  digitalWrite(ledPin2, HIGH);
+  digitalWrite(ledPin3, HIGH);
+  delay(500);
+  digitalWrite(ledPin1, LOW);
+  digitalWrite(ledPin2, LOW);
+  digitalWrite(ledPin3, LOW);
+  delay(500);
 }
