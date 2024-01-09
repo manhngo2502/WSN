@@ -43,9 +43,9 @@ float temp3=75;
 const int sensorPin = A0;
 float temperature;
 float preTemperature;
-int ledPin1 = 16;
-int ledPin2 = 5;
-int ledPin3 = 4;
+int ledPin1 = 5; //D1
+int ledPin2 = 4; //D2
+int ledPin3 = 2; //D4
 
 
 
@@ -206,7 +206,7 @@ void setup() {
   pinMode(ledPin2,OUTPUT);
   pinMode(ledPin3,OUTPUT);
   Serial.begin(9600);
-  EEPROM.begin(512);       //Khởi tạo bộ nhớ EEPROM
+  EEPROM.begin(512);       
   delay(100);
   
   if(read_EEPROM()){
@@ -445,6 +445,7 @@ void callback(char *topic,byte *payload, unsigned int length){
 }
 void readTemp(){
   int sensorValue=analogRead(sensorPin);
+  Serial.println(sensorValue);
   temperature=(sensorValue*5.0/1024.0)*100.0;
    if (temperature > temp3) {
     digitalWrite(ledPin3, HIGH);  
